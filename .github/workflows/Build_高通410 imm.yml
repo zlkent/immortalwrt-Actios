@@ -153,6 +153,21 @@ jobs:
         fi
         ln -sf /mnt/openwrt $GITHUB_WORKSPACE/openwrt
 
+    - name: Backport libffi for locked upstream
+      run: |
+        # The locked lkiuyu source predates libffi moving from the packages feed
+        # into the OpenWrt core tree, while the current ImmortalWrt packages
+        # feed's glib2 requires libffi. Supply the upstream package recipe only
+        # when the selected core tree does not already provide it.
+        if [ ! -f openwrt/package/libs/libffi/Makefile ]; then
+          install -d openwrt/package/libs/libffi
+          install -m 0644 package/libs/libffi/Makefile openwrt/package/libs/libffi/Makefile
+          echo "Backported libffi package recipe into locked upstream tree"
+        else
+          echo "Locked upstream already provides libffi; keeping its recipe"
+        fi
+        test -f openwrt/package/libs/libffi/Makefile
+
 
     - name:  files
       run: cp -r files openwrt/files
@@ -247,6 +262,11 @@ jobs:
       run: |
        cd openwrt
        make defconfig
+       if ! grep -qx 'CONFIG_PACKAGE_libffi=y' .config; then
+         echo "::error::libffi was not selected after resolving glib2 dependencies"
+         grep -nE 'CONFIG_PACKAGE_(glib2|libffi)' .config || true
+         exit 1
+       fi
        
     - name: Download package
       id: package
